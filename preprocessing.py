@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd 
+import argparse
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -139,6 +140,20 @@ def SDK_transform3d(v3d, T):
 
 ### convert active and grounded contacts to their respective coordinate spaces
 def contact_coordinates(points, leadtype, transformation_matrix):
+    """_summary_
+
+    Args:
+        points (str): Midpoint of activated electrode (derived by me using some weird logic)
+        leadtype (str): Medtronic 3389 or 3387
+        transformation_matrix (str): transformation matrix for LeadDBS sapce to another brain atlas
+
+    Raises:
+        ValueError: _description_
+        ValueError: _description_
+
+    Returns:
+        _type_: the coordinates of the active point in desired space
+    """
     contacts = [float(num) for num in points.split(' ')]
     contact_point = [0, 0, 0]
     distance = {'Medtronic3389': 2, 'Medtronic3387': 3}.get(leadtype, None)
@@ -171,34 +186,78 @@ def electode_extremes(transformation_matrix):
     x,y,z =pole[0][0],pole[0][1],pole[0][2] 
     return x,y,z
 
-def main():
+def remove_totals(df, target):
+    """There are different metrics for which the improvement score was calculated.
+        The user should be able to select the metric they want to use
 
-    path = " "
-    preprocessed_data = " "
+    Args:
+        df (_type_): _description_
+        target (_type_): improvement score to be used
 
-    # transformation of coordinates
-    df = get_data(path)
-    to_drop = ['name', 'id', 'stimplanname', 'filelocation', 'leadname', 'hemisphere', 'voltage', 'MNI', 'target', 'annotation', 'total_old', 'total', 'comment']
-    df1 = drop_columns(df, to_drop)
-    df1['tipinacpc'] = df1['tipinacpc'].apply(string_to_row_vector)
-    df1['topinacpc'] = df1['topinacpc'].apply(string_to_row_vector)
+    Returns:
+        _type_: _description_
+    """
+    # Get the list of all total columns
+    all_totals = [col for col in df.columns if 'total' in col]
 
-    # MNI
-    df1[['tip_x', 'tip_y', 'tip_z']] = df1.apply(lambda row: electode_extremes(row['Tlead2ACPC']), axis=1).apply(pd.Series)
-    df1[['contact_x', 'contact_y', 'contact_z']] = df1.apply(lambda row: contact_coordinates(row['position'], row['leadtype'], row['Tlead2ACPC']), axis=1).apply(pd.Series)
+    # Remove the selected total column from the list
+    all_totals.remove(target)
+
+    # Drop the unwanted total columns from the DataFrame
+    df = df.drop(all_totals, axis=1)
+
+    return df
+
+def preprocess_data(df, to_delete, space, target):
+    
+    non_existing_columns = set(to_delete) - set(df.columns)
+    if non_existing_columns:
+        raise ValueError(f"One or more columns specified in 'to_delete' do not exist in the DataFrame: {non_existing_columns}")
+    else:
+        df1 = df.drop(to_delete, axis=1)
+
+    df1 = remove_totals(df1, target)
+
+    if space == 'MNI':
+        transformation_matrix = 'Tlead2MNI'
+    elif space == 'ACPC':
+        transformation_matrix = 'Tlead2ACPC'
+    else:
+        print("Invalid space specified. Please choose either MNI or ACPC.")
+
+    df1[['electrode tip (x)', 'electrode tip (y)', 'electrode tip (z)']] = df1.apply(lambda row: electode_extremes(row[transformation_matrix]), axis=1).apply(pd.Series)
+    df1[['active contact (x)', 'active contact (y)', 'active contact (z)']] = df1.apply(lambda row: contact_coordinates(row['position'], row['leadtype'], row[transformation_matrix]), axis=1).apply(pd.Series)
 
     drop_please = ['activecontact', 'groundedcontact', 'position', 'tipinacpc', 'topinacpc',
                    'Tlead2MNI', 'Tlead2ACPC', 'leadtype']
     df1 = df1.drop(drop_please, axis=1)
 
-    # have the target as the last column
-    label = df1.pop('total_new')
+    label = df1.pop(target)
     df1['total'] = label
-
-    df1.to_excel(preprocessed_data, index=False)
-
     return df1
 
+
+def main(data_path, preprocessed_data, target, to_delete, space):
+    """
+    Main function to preprocess data.
+    """
+    df = get_data(data_path)
+    preprocessed_df = preprocess_data(df, to_delete, space, target)
+
+    # Save preprocessed data to the specified path
+    preprocessed_df.to_excel(preprocessed_data, index=False)
+
+   
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Process data from a specified path")
+    parser.add_argument("--data_path", type=str, help="Path to the raw data file")
+    parser.add_argument("--preprocessed_path", type=str, help="Specify path for the preprocessed data file")
+    parser.add_argument("--target", type=str, help="Specify the target column")
+    parser.add_argument("--space", type=str, help="Specify the space: MNI or ACPC")
+    parser.add_argument('--to_delete', nargs='+', help="List of columns to be deleted")
+    
+    args = parser.parse_args() 
+
+    main(args.data_path, args.preprocessed_path, args.target, args.to_delete, args.space)
 
