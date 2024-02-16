@@ -53,10 +53,15 @@ if __name__ == "__main__":
     parser.add_argument("--leadtype", type=str, help="Target column name")
     
     parser.add_argument("--data_path", type=str, help="Path to the data file")
+    
     args = parser.parse_args()
+    model = load_model(args.model_path)
+    preprocessor = load_model(args.ct_path)
+    
+
 
     model = load_model(args.model_path)
     data = pd.read_csv(args.data_path)
-    data = inference_preprocessor(data)
+    # data = inference_preprocessor(data)
     prediction = predict(model, data)
     print(f"Prediction: {prediction}")
