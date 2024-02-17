@@ -4,23 +4,8 @@ import argparse
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-
-"""Most recent preprocessing file"""
-def get_data(path):
-    """
-    Reads an Excel file from the specified path and returns its contents as a DataFrame.
-    Args:
-        path (str): The path to the Excel file that needs to be read.
-    Returns:
-        pandas.DataFrame: A DataFrame containing the data read from the Excel file.
-    """
-    try:
-        df = pd.read_excel(path)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"The file '{path}' was not found.")
-    except pd.errors.ParserError as e:
-        raise pd.errors.ParserError(f"Error parsing the Excel file '{path}': {e}")
-    return df
+from sklearn.compose import make_column_transformer, make_column_selector
+from sklearn.preprocessing import StandardScaler, OrdinalEncoder
 
 def drop_columns(df, columns):
     """
@@ -138,9 +123,8 @@ def SDK_transform3d(v3d, T):
 
     return transformed
 
-### convert active and grounded contacts to their respective coordinate spaces
 def contact_coordinates(points, leadtype, transformation_matrix):
-    """_summary_
+    """convert active and grounded contacts to their respective coordinate spaces
 
     Args:
         points (str): Midpoint of activated electrode (derived by me using some weird logic)
@@ -191,11 +175,11 @@ def remove_totals(df, target):
         The user should be able to select the metric they want to use
 
     Args:
-        df (_type_): _description_
-        target (_type_): improvement score to be used
+        df (DataFrame): _description_
+        target (float): improvement score to be used
 
     Returns:
-        _type_: _description_
+        DataFrame: _description_
     """
     # Get the list of all total columns
     all_totals = [col for col in df.columns if 'total' in col]
@@ -210,11 +194,14 @@ def remove_totals(df, target):
 
 def preprocess_data(df, to_delete, space, target):
     
-    non_existing_columns = set(to_delete) - set(df.columns)
-    if non_existing_columns:
-        raise ValueError(f"One or more columns specified in 'to_delete' do not exist in the DataFrame: {non_existing_columns}")
+    if not to_delete:
+        pass
     else:
-        df1 = df.drop(to_delete, axis=1)
+        non_existing_columns = set(to_delete) - set(df.columns)
+        if non_existing_columns:
+            raise ValueError(f"One or more columns specified in 'to_delete' do not exist in the DataFrame: {non_existing_columns}")
+        else:
+            df1 = df.drop(to_delete, axis=1)
 
     df1 = remove_totals(df1, target)
 
@@ -234,30 +221,34 @@ def preprocess_data(df, to_delete, space, target):
 
     label = df1.pop(target)
     df1['total'] = label
+
     return df1
 
+def normalise_data(df, to_delete, space, target):
 
-def main(data_path, preprocessed_data, target, to_delete, space):
-    """
-    Main function to preprocess data.
-    """
-    df = get_data(data_path)
-    preprocessed_df = preprocess_data(df, to_delete, space, target)
+    df = preprocess_data(df, to_delete, space, target)
+    X = df.iloc[:,:-1]
+    y = df.iloc[:,-1]
+    try:
+        ct = make_column_transformer(
+            (StandardScaler(), make_column_selector(dtype_include=np.number)),
+            (OrdinalEncoder(categories='auto'), make_column_selector(dtype_include=object)))
+        X = ct.fit_transform(X)
+        
+    except Exception as e:
+        print(f"Error in normalising data: {e}")
+        return None
+    else:
+        return {
+        "preprocessor": ct,
+        "data": (X,y)
+        }  
 
-    # Save preprocessed data to the specified path
-    preprocessed_df.to_excel(preprocessed_data, index=False)
+def inference_preprocessor(data_file, target, to_delete, space, ct):
+    data = pd.read_csv(data_file)
+    data = preprocess_data(data, to_delete, space, target)
+    data = ct.transform(data)
+    return data
 
-   
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process data from a specified path")
-    parser.add_argument("--data_path", type=str, help="Path to the raw data file")
-    parser.add_argument("--preprocessed_path", type=str, help="Specify path for the preprocessed data file")
-    parser.add_argument("--target", type=str, help="Specify the target column")
-    parser.add_argument("--space", type=str, help="Specify the space: MNI or ACPC")
-    parser.add_argument('--to_delete', nargs='+', help="List of columns to be deleted")
-    
-    args = parser.parse_args() 
-
-    main(args.data_path, args.preprocessed_path, args.target, args.to_delete, args.space)
 
