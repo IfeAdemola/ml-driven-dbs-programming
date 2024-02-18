@@ -1,7 +1,5 @@
 import numpy as np
 import pandas as pd 
-import argparse
-import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import make_column_transformer, make_column_selector
@@ -194,16 +192,16 @@ def remove_totals(df, target):
 
 def preprocess_data(df, to_delete, space, target):
     
-    if not to_delete:
-        pass
-    else:
-        non_existing_columns = set(to_delete) - set(df.columns)
-        if non_existing_columns:
-            raise ValueError(f"One or more columns specified in 'to_delete' do not exist in the DataFrame: {non_existing_columns}")
-        else:
-            df1 = df.drop(to_delete, axis=1)
+    # if not to_delete:
+    #     pass
+    # else:
+    #     non_existing_columns = set(to_delete) - set(df.columns)
+    #     if non_existing_columns:
+    #         raise ValueError(f"One or more columns specified in 'to_delete' do not exist in the DataFrame: {non_existing_columns}")
+    #     else:
+    #         df1 = df.drop(to_delete, axis=1)
 
-    df1 = remove_totals(df1, target)
+    df1 = remove_totals(df, target)
 
     if space == 'MNI':
         transformation_matrix = 'Tlead2MNI'
