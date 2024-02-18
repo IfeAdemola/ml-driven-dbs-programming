@@ -15,7 +15,7 @@ from sklearn.svm import SVR
 from sklearn.ensemble import RandomForestRegressor
 
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
-mlflow.set_experiment("project_v1")
+mlflow.set_experiment("project_18_02_2024")
 
 def load_data(path):
     """
@@ -83,10 +83,6 @@ def train_model(X,y):
             grid_search = GridSearchCV(estimator=model(), param_grid=parameters[model_name],
                                     cv=LeaveOneOut(), scoring='neg_mean_squared_error', n_jobs=-1, verbose=4,
                                     return_train_score=True)
-
-            # Assuming your features and target are defined globally
-            X = preprocessing.transform_features(X)
-            y = y
 
             grid_search.fit(X, y)
 
