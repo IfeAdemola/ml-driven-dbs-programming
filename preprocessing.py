@@ -168,7 +168,7 @@ def electode_extremes(transformation_matrix):
     x,y,z =pole[0][0],pole[0][1],pole[0][2] 
     return x,y,z
 
-def remove_totals(df, target):
+def remove_totals(df, target=None):
     """There are different metrics for which the improvement score was calculated.
         The user should be able to select the metric they want to use
 
@@ -182,26 +182,21 @@ def remove_totals(df, target):
     # Get the list of all total columns
     all_totals = [col for col in df.columns if 'total' in col]
 
-    # Remove the selected total column from the list
-    all_totals.remove(target)
+    if target is not None:
+        # Remove the selected total column from the list
+        all_totals.remove(target)
 
-    # Drop the unwanted total columns from the DataFrame
-    df = df.drop(all_totals, axis=1)
+        # Drop the unwanted total columns from the DataFrame
+        if not all_totals:
+            pass #does nothing if the list is empty
+        else:
+            df = df.drop(all_totals, axis=1)
 
     return df
 
-def preprocess_data(df, to_delete, space, target):
-    
-    # if not to_delete:
-    #     pass
-    # else:
-    #     non_existing_columns = set(to_delete) - set(df.columns)
-    #     if non_existing_columns:
-    #         raise ValueError(f"One or more columns specified in 'to_delete' do not exist in the DataFrame: {non_existing_columns}")
-    #     else:
-    #         df1 = df.drop(to_delete, axis=1)
+def preprocess_data(df, space, target=None):
 
-    df1 = remove_totals(df, target)
+    df = remove_totals(df, target=None)
 
     if space == 'MNI':
         transformation_matrix = 'Tlead2MNI'
@@ -210,21 +205,24 @@ def preprocess_data(df, to_delete, space, target):
     else:
         print("Invalid space specified. Please choose either MNI or ACPC.")
 
-    df1[['electrode tip (x)', 'electrode tip (y)', 'electrode tip (z)']] = df1.apply(lambda row: electode_extremes(row[transformation_matrix]), axis=1).apply(pd.Series)
-    df1[['active contact (x)', 'active contact (y)', 'active contact (z)']] = df1.apply(lambda row: contact_coordinates(row['position'], row['leadtype'], row[transformation_matrix]), axis=1).apply(pd.Series)
+    df1 = pd.DataFrame()
 
-    drop_please = ['activecontact', 'groundedcontact', 'position', 'tipinacpc', 'topinacpc',
-                   'Tlead2MNI', 'Tlead2ACPC', 'leadtype']
-    df1 = df1.drop(drop_please, axis=1)
+    # Add columns 'amplitude', 'frequency', 'pulsewidth' to df1
+    df1[['dystonia type', 'amplitude','pulsewidth', 'frequency']] = df[['dystonia type', 'amplitude', 'pulsewidth',  'frequency']]
 
-    label = df1.pop(target)
-    df1['total'] = label
+    df1[['electrode tip (x)', 'electrode tip (y)', 'electrode tip (z)']] = df.apply(lambda row: electode_extremes(row[transformation_matrix]), axis=1).apply(pd.Series)
+    df1[['active contact (x)', 'active contact (y)', 'active contact (z)']] = df.apply(lambda row: contact_coordinates(row['position'], row['leadtype'], row[transformation_matrix]), axis=1).apply(pd.Series)
+
+    if target is not None:
+        df1[['total']] = df[[target]]
+    else:
+        pass
 
     return df1
 
-def normalise_data(df, to_delete, space, target):
+def normalise_data(df, space, target=None):
 
-    df = preprocess_data(df, to_delete, space, target)
+    df = preprocess_data(df, space, target)
     X = df.iloc[:,:-1]
     y = df.iloc[:,-1]
     try:
@@ -242,9 +240,8 @@ def normalise_data(df, to_delete, space, target):
         "data": (X,y)
         }  
 
-def inference_preprocessor(data_file, target, to_delete, space, ct):
-    data = pd.read_csv(data_file)
-    data = preprocess_data(data, to_delete, space, target)
+def inference_preprocessor(df, space, ct):
+    data = preprocess_data(df, space)
     data = ct.transform(data)
     return data
 

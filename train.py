@@ -6,6 +6,7 @@ import pandas as pd
 import xgboost as xgb
 import joblib
 import argparse
+import os
 from sklearn.preprocessing import StandardScaler, OrdinalEncoder
 from sklearn.compose import make_column_transformer, make_column_selector
 from sklearn.model_selection import GridSearchCV,LeaveOneOut
@@ -13,9 +14,13 @@ from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.svm import SVR
 from sklearn.ensemble import RandomForestRegressor
+from datetime import datetime
 
+
+current_date = datetime.now().strftime("%d_%m_%Y")
+experiment_name = f"project_{current_date}"
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
-mlflow.set_experiment("project_18_02_2024")
+mlflow.set_experiment(experiment_name)
 
 def load_data(path):
     """
@@ -38,10 +43,10 @@ def train_model(X,y):
     # Define models and parameters
     models = {
         'Lasso': Lasso,
-        'Ridge': Ridge,
-        'SVR': SVR,
-        'RF': RandomForestRegressor,
-        'xgboost': xgb.XGBRegressor
+        # 'Ridge': Ridge,
+        # 'SVR': SVR,
+        'RF': RandomForestRegressor#,
+        # 'xgboost': xgb.XGBRegressor
     }
 
     parameters = {
@@ -50,24 +55,24 @@ def train_model(X,y):
             'max_iter': [100, 500, 700, 1000, 2000],
             'selection': ['cyclic', 'random']
         },
-        'Ridge': {
-            'alpha': [0.001, 0.01, 0.1, 1.0, 10]
-        },
-        'SVR': {
-            'kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
-            'C': [0.1, 1, 10, 100],
-            'epsilon': [0.01, 0.1, 1, 10],
-            'gamma': ['scale', 'auto']
-        },
+        # 'Ridge': {
+        #     'alpha': [0.001, 0.01, 0.1, 1.0, 10]
+        # },
+        # 'SVR': {
+        #     'kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
+        #     'C': [0.1, 1, 10, 100],
+        #     'epsilon': [0.01, 0.1, 1, 10],
+        #     'gamma': ['scale', 'auto']
+        # },
         'RF': {
             'n_estimators': [2, 5, 10, 20, 50, 100, 200],
             'max_depth': [None, 5, 10, 20, 25, 30]
-        },
-        'xgboost': {
-            "max_depth": [2, 3, 4, 5, 6],
-            "n_estimators": [500, 600, 700, 750, 800],
-            "learning_rate": [0.001, 0.01, 0.1, 1]
-        }
+        }#,
+        # 'xgboost': {
+        #     "max_depth": [2, 3, 4, 5, 6],
+        #     "n_estimators": [500, 600, 700, 750, 800],
+        #     "learning_rate": [0.001, 0.01, 0.1, 1]
+        # }
     }
 
     # Iterate over models
@@ -99,9 +104,16 @@ def train_model(X,y):
             trained_model.fit(X, y)
             y_pred = trained_model.predict(X)
 
+            # Calculate percentage deviation
+            deviation = np.abs(y_pred - y)            
+
             # Calculate metrics and log
-            mse = mean_squared_error(y, y_pred)
-            rmse = np.sqrt(mse)
+            avg_deviation = np.mean(deviation)
+            deviation_range = np.std(deviation)
+            rmse = np.sqrt(np.mean((y_pred - y) ** 2))
+
+            mlflow.log_metric("Average Deviation", avg_deviation)
+            mlflow.log_metric("Deviation Range", deviation_range)
             mlflow.log_metric("RMSE", rmse)
 
             file_path = f"artifacts/model/{model_name}_model.joblib"
@@ -118,23 +130,26 @@ def save_model(model,file_path):
         file_path (str): The file path where the model will be saved.
     """
     try:
+        # Ensure that the directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
         joblib.dump(model, file_path)
         print(f"Model saved to {file_path}")
     except Exception as e:
         print(f"Error while saving the model: {str(e)}")
 
-def main(data_path, to_delete, space, target):
+def main(data_path, space, target):
     df = load_data(data_path)
-    output = preprocessing.normalise_data(df, to_delete, space, target)
+    output = preprocessing.normalise_data(df, space, target)
     model = train_model(*output['data'])
-    save_model(output['preprocessor'], "artifacts/preprocessor.joblib")
+    preprocessor_path = "artifacts/preprocessor.joblib"
+    save_model(output['preprocessor'], preprocessor_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Process data from a specified path")
     parser.add_argument("--data_path", type=str, help="Path to the raw data file")
     parser.add_argument("--target", type=str, help="Specify the target variable: old total or new total")
     parser.add_argument("--space", type=str, help="Specify the space: MNI or ACPC")
-    parser.add_argument('--to_delete', nargs='+', help="List of columns to be deleted")
 
     args = parser.parse_args()
-    main(args.data_path, args.to_delete, args.space, args.target)
+    main(args.data_path, args.space, args.target)
