@@ -32,11 +32,11 @@ def load_models(model_path, preprocessor_path):
     return model, preprocessor
 
 def main():
-    st.title('DBS') 
-    st.markdown('Predicting the dystonia improvement scores given DBS programming parameters')
+    st.title('Dystonia Improvement Score Prediction') 
+    st.markdown('Predicting the dystonia improvement scores given DBS programming parameters and electrode localisation')
     st.sidebar.markdown("## Variable Selector")
     space = st.sidebar.selectbox("Atlas space",
-                                 ("MNI", "ACPC"),
+                                 ("ACPC", "MNI"),
                                  index = 0#None,
                                 #  placeholder = "Select Atlas space"
                                 ) ### upgrade streamlit version... why so old
@@ -49,17 +49,14 @@ def main():
         # elif type == "csv":
         #     df = pd.read_csv(uploaded_file)
         df = pd.read_excel(uploaded_file)
-        st.write(df)
-        # st.dataframe(df)
+        
 
         model, preprocessor = load_models(model_path, preprocessor_path)
         preprocessed_data = inference_preprocessor(df, space, preprocessor)
         predictions = []
         if st.button('Predict dystonia improvement score'):
-            for row in preprocessed_data:
-                prediction = predict(model, row)
-                predictions.append(prediction)
-            df['Predicted score'] = predictions
+            prediction = model.predict(preprocessed_data)
+            df['Predicted score'] = prediction
         st.write(df)
         
 
@@ -85,9 +82,6 @@ def run(model, preprocessor, data,space):
 
     return prediction
 
-
-
-    
 
 if __name__ == "__main__":
     main()
